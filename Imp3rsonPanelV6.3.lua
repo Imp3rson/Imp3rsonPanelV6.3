@@ -590,8 +590,9 @@ end)
 print("[✅] MM2 v2.1 PARTE 2/3 (Funções + Auto Pickup Gun + ESP Arma) carregada!")
 
 -- ============================================
--- 🔫 Imp3rson MM2 Hub v2.1 - PARTE 3/3 (UI)
+-- 🔫 Imp3rson MM2 Hub v2.1.1 - PARTE 3/3 (UI)
 -- Layout retangular + menu lateral esquerdo
+-- FIX: sidebar com botões visíveis
 -- ============================================
 
 local MM2 = _G.Imp3rsonMM2
@@ -631,9 +632,6 @@ local Header = Instance.new("Frame")
 Header.Parent = Window; Header.BackgroundColor3 = BG; Header.BorderSizePixel = 0
 Header.Position = UDim2.new(0, 0, 0, 0); Header.Size = UDim2.new(1, 0, 0, 44); Header.ZIndex = 2
 local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Parent = Header
-local hFix = Instance.new("Frame")
-hFix.Parent = Header; hFix.BackgroundColor3 = BG; hFix.BorderSizePixel = 0
-hFix.Position = UDim2.new(0, 0, 1, -12); hFix.Size = UDim2.new(1, 0, 0, 12); hFix.ZIndex = 2
 
 local Title = Instance.new("TextLabel")
 Title.Parent = Header; Title.BackgroundTransparency = 1
@@ -664,21 +662,29 @@ local Divider = Instance.new("Frame")
 Divider.Parent = Window; Divider.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
 Divider.Position = UDim2.new(0, 0, 0, 44); Divider.Size = UDim2.new(1, 0, 0, 1); Divider.ZIndex = 2
 
--- ==================== SIDEBAR ====================
+-- ==================== SIDEBAR (CORRIGIDO) ====================
 local Sidebar = Instance.new("Frame")
-Sidebar.Parent = Window; Sidebar.BackgroundColor3 = SIDEBAR; Sidebar.BorderSizePixel = 0
-Sidebar.Position = UDim2.new(0, 0, 0, 45); Sidebar.Size = UDim2.new(0, 130, 1, -45); Sidebar.ZIndex = 2
-local sbC = Instance.new("UICorner"); sbC.CornerRadius = UDim.new(0, 12); sbC.Parent = Sidebar
-local sbFix = Instance.new("Frame")
-sbFix.Parent = Sidebar; sbFix.BackgroundColor3 = SIDEBAR; sbFix.BorderSizePixel = 0
-sbFix.Position = UDim2.new(1, -12, 0, 0); sbFix.Size = UDim2.new(0, 12, 1, 0); sbFix.ZIndex = 2
+Sidebar.Parent = Window
+Sidebar.BackgroundColor3 = SIDEBAR
+Sidebar.BorderSizePixel = 0
+Sidebar.Position = UDim2.new(0, 0, 0, 45)
+Sidebar.Size = UDim2.new(0, 130, 1, -45)
+Sidebar.ZIndex = 2
+-- Sem UICorner no sidebar pra não bugar o canto
+-- Arredondamento do canto inferior esquerdo é coberto pelo Window
 
+-- UIListLayout (só nos botões)
 local sidebarLayout = Instance.new("UIListLayout")
-sidebarLayout.Parent = Sidebar; sidebarLayout.Padding = UDim.new(0, 6)
+sidebarLayout.Parent = Sidebar
+sidebarLayout.Padding = UDim.new(0, 6)
 sidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+sidebarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
 local sidebarPad = Instance.new("UIPadding")
-sidebarPad.Parent = Sidebar; sidebarPad.PaddingTop = UDim.new(0, 12)
-sidebarPad.PaddingLeft = UDim.new(0, 8); sidebarPad.PaddingRight = UDim.new(0, 8)
+sidebarPad.Parent = Sidebar
+sidebarPad.PaddingTop = UDim.new(0, 12)
+sidebarPad.PaddingLeft = UDim.new(0, 8)
+sidebarPad.PaddingRight = UDim.new(0, 8)
 
 -- ==================== CONTENT ====================
 local ContentArea = Instance.new("Frame")
@@ -698,31 +704,48 @@ local TAB_NAMES = {
 
 for i, tab in ipairs(TAB_NAMES) do
     local b = Instance.new("TextButton")
-    b.Parent = Sidebar; b.BackgroundColor3 = CARD; b.BorderSizePixel = 0
+    b.Parent = Sidebar
+    b.BackgroundColor3 = CARD
+    b.BorderSizePixel = 0
     b.Size = UDim2.new(1, 0, 0, 38)
-    b.Font = Enum.Font.GothamBold; b.Text = tab.label
-    b.TextColor3 = Color3.fromRGB(220, 220, 220); b.TextSize = 13
+    b.Font = Enum.Font.GothamBold
+    b.Text = tab.label
+    b.TextColor3 = Color3.fromRGB(220, 220, 220)
+    b.TextSize = 13
     b.TextXAlignment = Enum.TextXAlignment.Left
-    b.LayoutOrder = i; b.ZIndex = 3; b.AutoButtonColor = false
+    b.LayoutOrder = i
+    b.ZIndex = 3
+    b.AutoButtonColor = false
     local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 8); bc.Parent = b
     local bp = Instance.new("UIPadding"); bp.PaddingLeft = UDim.new(0, 12); bp.Parent = b
     tabButtons[tab.id] = b
 
+    -- Barra vermelha indicadora
     local indicator = Instance.new("Frame")
-    indicator.Parent = b; indicator.BackgroundColor3 = ACCENT; indicator.BorderSizePixel = 0
-    indicator.Position = UDim2.new(0, 0, 0.2, 0); indicator.Size = UDim2.new(0, 3, 0.6, 0)
-    indicator.ZIndex = 4; indicator.Visible = false
+    indicator.Parent = b
+    indicator.BackgroundColor3 = ACCENT
+    indicator.BorderSizePixel = 0
+    indicator.Position = UDim2.new(0, 0, 0.2, 0)
+    indicator.Size = UDim2.new(0, 3, 0.6, 0)
+    indicator.ZIndex = 4
+    indicator.Visible = false
     b:SetAttribute("Indicator", indicator)
 
+    -- Página
     local page = Instance.new("ScrollingFrame")
-    page.Parent = ContentArea; page.BackgroundTransparency = 1
-    page.Size = UDim2.new(1, -20, 1, -20); page.Position = UDim2.new(0, 10, 0, 10)
-    page.CanvasSize = UDim2.new(0, 0, 0, 0); page.ScrollBarThickness = 3
+    page.Parent = ContentArea
+    page.BackgroundTransparency = 1
+    page.Size = UDim2.new(1, -20, 1, -20)
+    page.Position = UDim2.new(0, 10, 0, 10)
+    page.CanvasSize = UDim2.new(0, 0, 0, 0)
+    page.ScrollBarThickness = 3
     page.ScrollBarImageColor3 = ACCENT
     page.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    page.Visible = (i == 1); page.ZIndex = 3
+    page.Visible = (i == 1)
+    page.ZIndex = 3
     local pl = Instance.new("UIListLayout")
-    pl.Parent = page; pl.Padding = UDim.new(0, 6); pl.SortOrder = Enum.SortOrder.LayoutOrder
+    pl.Parent = page; pl.Padding = UDim.new(0, 6)
+    pl.SortOrder = Enum.SortOrder.LayoutOrder
     pages[tab.id] = page
 
     b.MouseButton1Click:Connect(function()
@@ -966,4 +989,4 @@ floatBtn.InputChanged:Connect(function(i)
     end
 end)
 
-print("[✅] MM2 v2.1 PARTE 3/3 (UI completa) carregada!")
+print("[✅] MM2 v2.1.1 PARTE 3/3 (UI corrigida) carregada!")
