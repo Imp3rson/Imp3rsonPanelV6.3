@@ -692,15 +692,31 @@ ContentArea.Parent = Window; ContentArea.BackgroundTransparency = 1
 ContentArea.Position = UDim2.new(0, 130, 0, 45); ContentArea.Size = UDim2.new(1, -130, 1, -45)
 ContentArea.ZIndex = 2
 
--- ==================== ABAS ====================
+-- ==================== ABAS (CORRIGIDO v2.1.2) ====================
 local pages = {}
 local tabButtons = {}
+local indicators = {}   -- ⭐ FIX: tabela Lua em vez de SetAttribute (que dava erro)
+
 local TAB_NAMES = {
     { id = "ESP", label = "👁️  ESP" },
     { id = "Murder", label = "🔪  Murder" },
     { id = "Sheriff", label = "🔫  Sheriff" },
     { id = "Innocent", label = "🟢  Innocent" },
 }
+
+-- ⭐ FIX: função de troca de aba declarada ANTES dos botões
+local currentTabId = "ESP"
+local function switchTab(id)
+    if not pages[id] then return end
+    currentTabId = id
+    for tid, btn in pairs(tabButtons) do
+        local selected = (tid == id)
+        btn.BackgroundColor3 = selected and ACCENT or CARD
+        btn.TextColor3 = selected and Color3.fromRGB(255,255,255) or Color3.fromRGB(220,220,220)
+        if indicators[tid] then indicators[tid].Visible = selected end
+        pages[tid].Visible = selected
+    end
+end
 
 for i, tab in ipairs(TAB_NAMES) do
     local b = Instance.new("TextButton")
@@ -716,9 +732,57 @@ for i, tab in ipairs(TAB_NAMES) do
     b.LayoutOrder = i
     b.ZIndex = 3
     b.AutoButtonColor = false
+    b.Active = true
+
     local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 8); bc.Parent = b
     local bp = Instance.new("UIPadding"); bp.PaddingLeft = UDim.new(0, 12); bp.Parent = b
+
     tabButtons[tab.id] = b
+
+    -- ⭐ FIX: conecta o clique PRIMEIRO (antes de qualquer coisa que possa falhar)
+    b.MouseButton1Click:Connect(function()
+        switchTab(tab.id)
+    end)
+
+    -- Barra vermelha indicadora
+    local indicator = Instance.new("Frame")
+    indicator.Parent = b
+    indicator.BackgroundColor3 = ACCENT
+    indicator.BorderSizePixel = 0
+    indicator.Position = UDim2.new(0, 0, 0.2, 0)
+    indicator.Size = UDim2.new(0, 3, 0.6, 0)
+    indicator.ZIndex = 4
+    indicator.Visible = false
+    indicators[tab.id] = indicator  -- ⭐ FIX: guarda na tabela Lua
+
+    b.MouseEnter:Connect(function()
+        if tabButtons[tab.id] and currentTabId ~= tab.id then b.BackgroundColor3 = CARD_HOVER end
+    end)
+    b.MouseLeave:Connect(function()
+        if tabButtons[tab.id] and currentTabId ~= tab.id then b.BackgroundColor3 = CARD end
+    end)
+
+    -- Página
+    local page = Instance.new("ScrollingFrame")
+    page.Parent = ContentArea
+    page.BackgroundTransparency = 1
+    page.Size = UDim2.new(1, -20, 1, -20)
+    page.Position = UDim2.new(0, 10, 0, 10)
+    page.CanvasSize = UDim2.new(0, 0, 0, 0)
+    page.ScrollBarThickness = 3
+    page.ScrollBarImageColor3 = ACCENT
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.Visible = (i == 1)
+    page.ZIndex = 3
+
+    local pl = Instance.new("UIListLayout")
+    pl.Parent = page; pl.Padding = UDim.new(0, 6)
+    pl.SortOrder = Enum.SortOrder.LayoutOrder
+
+    pages[tab.id] = page
+end
+
+switchTab("ESP") -- ⭐ já inicia na aba ESP com tudo destacado certo
 
     -- Barra vermelha indicadora
     local indicator = Instance.new("Frame")
