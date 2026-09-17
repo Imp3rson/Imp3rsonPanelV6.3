@@ -1,6 +1,6 @@
 -- ============================================
--- 🔪 Imp3rson MM2 Hub - PARTE 1/2 (CORE)
--- Settings + Detecção de Função + ESP + Aimbot
+-- 🔫 Imp3rson MM2 Hub v2.1 - PARTE 1/3 (CORE)
+-- Settings + Detecção + ESP + Aimbot
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -9,7 +9,6 @@ local UIS = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
--- Tabela global compartilhada com a PARTE 2
 local MM2 = {}
 _G.Imp3rsonMM2 = MM2
 
@@ -33,6 +32,10 @@ MM2.Settings = {
     AimbotEnabled = false, AimRage = false, AimSmooth = 0.25, AimFOV = 150, AimPart = "Head",
     AutoShootMurder = false, ShootRange = 200, AutoAimMurder = false,
     AutoCollect = false, CollectRange = 60, AutoBuy = false,
+    -- 🆕 Novas funções da aba Innocent
+    AutoPickupGun = false,
+    AutoNotifyWeapon = false,
+    GunNotifyDistance = 200,
 }
 local Settings = MM2.Settings
 
@@ -80,7 +83,7 @@ function MM2.getPart(char, name)
     return MM2.getRoot(char)
 end
 
--- ==================== ESP POR FUNÇÃO ====================
+-- ==================== ESP ====================
 local function wipeDrawings(c)
     if c.draw then for _, o in pairs(c.draw) do pcall(function() o:Remove() end) end c.draw = nil end
     if c.chams then pcall(function() c.chams:Destroy() end) c.chams, c.chamsChar = nil, nil end
@@ -222,7 +225,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- FOV Circle
 MM2.FovCircle = nil
 if MM2.DrawingOK then
     pcall(function()
@@ -240,22 +242,24 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-print("[✅] MM2 PARTE 1 (Core + ESP + Aimbot) carregada!")
+print("[✅] MM2 v2.1 PARTE 1/3 (Core + ESP + Aimbot) carregada!")
 
 -- ============================================
--- 🔪 Imp3rson MM2 Hub - PARTE 2/2 (FUNÇÕES + UI)
--- Murder / Sheriff / Innocent + Menu com Abas
+-- 🔫 Imp3rson MM2 Hub v2.1 - PARTE 2/3 (FUNÇÕES)
+-- Auto Knife, Auto Shoot, Auto Pickup Gun, ESP da arma
 -- ============================================
 
 local MM2 = _G.Imp3rsonMM2
 if not MM2 then warn("[❌] Execute a PARTE 1 primeiro!") return end
 
 local Settings = MM2.Settings
-local Players, RunService, UIS, CoreGui, RS = MM2.Services.Players, MM2.Services.RunService, MM2.Services.UIS, MM2.Services.CoreGui, MM2.Services.RS
+local Players = MM2.Services.Players
+local RunService = MM2.Services.RunService
+local RS = MM2.Services.RS
 local LocalPlayer = MM2.LocalPlayer
 local camera = workspace.CurrentCamera
 
--- ==================== HELPERS DE FERRAMENTAS ====================
+-- ==================== HELPERS ====================
 local function findTool(patterns)
     local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
     local char = LocalPlayer.Character
@@ -273,7 +277,6 @@ local function findTool(patterns)
     end
     return nil
 end
-
 local function findKnife() return findTool({"knife"}) end
 local function findGun() return findTool({"gun", "revolver", "pistol"}) end
 
@@ -307,7 +310,166 @@ local function findRemote(names)
     return nil
 end
 
--- ==================== 🔪 MURDER: AUTO KNIFE + AUTO THROW ====================
+-- ==================== DETECTOR DE ARMA NO CHÃO ====================
+MM2.droppedGuns = MM2.droppedGuns or {}
+MM2.gunEspDrawings = MM2.gunEspDrawings or {}
+local droppedGuns = MM2.droppedGuns
+local gunEspDrawings = MM2.gunEspDrawings
+
+local GUN_KEYWORDS = {"gun", "revolver", "pistol", "weapon"}
+
+local function isGunPart(part)
+    if not part or not part:IsA("BasePart") then return false end
+    local n = part.Name:lower()
+    for _, k in ipairs(GUN_KEYWORDS) do
+        if n:find(k) then return true end
+    end
+    if part.Parent and part.Parent:FindFirstChild("Handle") == part then
+        local pn = part.Parent.Name:lower()
+        for _, k in ipairs(GUN_KEYWORDS) do
+            if pn:find(k) then return true end
+        end
+    end
+    return false
+end
+
+task.spawn(function()
+    while not MM2.Unloaded do
+        pcall(function()
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj:IsA("BasePart") and isGunPart(obj) then
+                    if not droppedGuns[obj] then
+                        droppedGuns[obj] = { part = obj, addedAt = tick() }
+                        if Settings.AutoNotifyWeapon then
+                            local d = {}
+                            d.box = Drawing.new("Quad")
+                            d.box.Thickness = 2; d.box.Filled = false
+                            d.box.Color = Color3.fromRGB(255, 200, 0); d.box.ZIndex = 4
+                            d.label = Drawing.new("Text")
+                            d.label.Size = 14; d.label.Center = true; d.label.Outline = true
+                            d.label.Color = Color3.fromRGB(255, 200, 0); d.label.ZIndex = 5
+                            d.line = Drawing.new("Line")
+                            d.line.Thickness = 1.5
+                            d.line.Color = Color3.fromRGB(255, 200, 0); d.line.ZIndex = 3
+                            gunEspDrawings[obj] = d
+                        end
+                    end
+                end
+            end
+            for part, _ in pairs(droppedGuns) do
+                if not part.Parent then
+                    local d = gunEspDrawings[part]
+                    if d then
+                        for _, o in pairs(d) do pcall(function() o:Remove() end) end
+                        gunEspDrawings[part] = nil
+                    end
+                    droppedGuns[part] = nil
+                end
+            end
+        end)
+        task.wait(1)
+    end
+end)
+
+-- ==================== AUTO PICKUP GUN ====================
+task.spawn(function()
+    while not MM2.Unloaded do
+        pcall(function()
+            if not Settings.AutoPickupGun then task.wait(0.5) return end
+            local myRole = MM2.myRole()
+            if myRole == "Murder" then task.wait(0.5) return end
+            if findGun() then task.wait(1) return end
+
+            local myRoot = MM2.getRoot(MM2.getChar(LocalPlayer))
+            if not myRoot then task.wait(0.5) return end
+
+            local closest, cdist = nil, 999999
+            for part, _ in pairs(droppedGuns) do
+                if part.Parent then
+                    local d = (part.Position - myRoot.Position).Magnitude
+                    if d < cdist then closest, cdist = part, d end
+                end
+            end
+
+            if closest then
+                local char = MM2.getChar(LocalPlayer)
+                if char then
+                    myRoot.CFrame = CFrame.new(closest.Position + Vector3.new(0, 2, 0))
+                    task.wait(0.3)
+                    if typeof(FireTouchInterest) == "function" then
+                        pcall(function()
+                            FireTouchInterest(closest, myRoot, 0)
+                            task.wait(0.1)
+                            FireTouchInterest(closest, myRoot, 1)
+                        end)
+                    end
+                    if closest.Parent and closest.Parent:IsA("Tool") then
+                        pcall(function()
+                            LocalPlayer.Character:WaitForChild("Humanoid"):EquipTool(closest.Parent)
+                        end)
+                    end
+                end
+                task.wait(1.5)
+            end
+        end)
+        task.wait(0.5)
+    end
+end)
+
+-- ==================== ESP DA ARMA ====================
+RunService.RenderStepped:Connect(function()
+    if MM2.Unloaded then return end
+    if not Settings.AutoNotifyWeapon then
+        for _, d in pairs(gunEspDrawings) do
+            if d.box then d.box.Visible = false end
+            if d.label then d.label.Visible = false end
+            if d.line then d.line.Visible = false end
+        end
+        return
+    end
+    camera = workspace.CurrentCamera
+    if not camera then return end
+    local myRoot = MM2.getRoot(MM2.getChar(LocalPlayer))
+
+    for part, d in pairs(gunEspDrawings) do
+        if part and part.Parent and myRoot then
+            local dist = (part.Position - myRoot.Position).Magnitude
+            if dist <= Settings.GunNotifyDistance then
+                local sp, on = camera:WorldToViewportPoint(part.Position)
+                if on then
+                    local size = math.clamp(400 / math.max(dist, 5), 15, 80)
+                    local cx, cy = sp.X, sp.Y
+
+                    d.box.Visible = true
+                    d.box.Color = Color3.fromRGB(255, 200, 0)
+                    d.box.PointA = Vector2.new(cx - size/2, cy - size/2)
+                    d.box.PointB = Vector2.new(cx + size/2, cy - size/2)
+                    d.box.PointC = Vector2.new(cx + size/2, cy + size/2)
+                    d.box.PointD = Vector2.new(cx - size/2, cy + size/2)
+
+                    d.label.Visible = true
+                    d.label.Text = "🔫 ARMA (" .. math.floor(dist) .. "m)"
+                    d.label.Color = Color3.fromRGB(255, 200, 0)
+                    d.label.Position = Vector2.new(cx, cy - size/2 - 18)
+
+                    d.line.Visible = true
+                    d.line.From = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y)
+                    d.line.To = Vector2.new(cx, cy)
+                else
+                    d.box.Visible = false; d.label.Visible = false; d.line.Visible = false
+                end
+            else
+                d.box.Visible = false; d.label.Visible = false; d.line.Visible = false
+            end
+        else
+            if d.box then d.box.Visible = false end
+            if d.label then d.label.Visible = false end
+            if d.line then d.line.Visible = false end
+        end
+    end
+end)
+
+-- ==================== LOOPS MURDER / SHERIFF / INNOCENT ====================
 task.spawn(function()
     while not MM2.Unloaded do
         pcall(function()
@@ -341,7 +503,6 @@ task.spawn(function()
     end
 end)
 
--- ==================== 🔫 SHERIFF: AUTO SHOT MURDER ====================
 task.spawn(function()
     while not MM2.Unloaded do
         pcall(function()
@@ -380,7 +541,6 @@ task.spawn(function()
     end
 end)
 
--- ==================== 🟢 INNOCENT: AUTO COLLECT + AUTO BUY ====================
 task.spawn(function()
     while not MM2.Unloaded do
         pcall(function()
@@ -427,12 +587,29 @@ task.spawn(function()
     end
 end)
 
--- ==================== INTERFACE COM ABAS ====================
+print("[✅] MM2 v2.1 PARTE 2/3 (Funções + Auto Pickup Gun + ESP Arma) carregada!")
+
+-- ============================================
+-- 🔫 Imp3rson MM2 Hub v2.1 - PARTE 3/3 (UI)
+-- Layout retangular + menu lateral esquerdo
+-- ============================================
+
+local MM2 = _G.Imp3rsonMM2
+if not MM2 then warn("[❌] Execute as PARTES 1 e 2 primeiro!") return end
+
+local Settings = MM2.Settings
+local UIS = MM2.Services.UIS
+local CoreGui = MM2.Services.CoreGui
+local LocalPlayer = MM2.LocalPlayer
+
+-- ==================== CORES ====================
 local ACCENT = Color3.fromRGB(255, 45, 45)
 local BG = Color3.fromRGB(16, 16, 18)
+local SIDEBAR = Color3.fromRGB(22, 22, 25)
 local CARD = Color3.fromRGB(32, 32, 36)
-local TABBAR = Color3.fromRGB(24, 24, 27)
+local CARD_HOVER = Color3.fromRGB(42, 42, 48)
 
+-- ==================== JANELA ====================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "Imp3rsonMM2Hub"
 ScreenGui.Parent = CoreGui
@@ -441,137 +618,203 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 MM2.ScreenGui = ScreenGui
 
 local Window = Instance.new("Frame")
-Window.Parent = ScreenGui; Window.BackgroundColor3 = BG
-Window.Position = UDim2.new(0.5, -170, 0.5, -230)
-Window.Size = UDim2.new(0, 340, 0, 460); Window.ZIndex = 1
+Window.Parent = ScreenGui
+Window.BackgroundColor3 = BG
+Window.Position = UDim2.new(0.5, -280, 0.5, -190)
+Window.Size = UDim2.new(0, 560, 0, 380)
+Window.ZIndex = 1
 local wC = Instance.new("UICorner"); wC.CornerRadius = UDim.new(0, 12); wC.Parent = Window
-local wS = Instance.new("UIStroke"); wS.Color = ACCENT; wS.Thickness = 1.4; wS.Parent = Window
+local wS = Instance.new("UIStroke"); wS.Color = ACCENT; wS.Thickness = 1.5; wS.Parent = Window
+
+-- ==================== HEADER ====================
+local Header = Instance.new("Frame")
+Header.Parent = Window; Header.BackgroundColor3 = BG; Header.BorderSizePixel = 0
+Header.Position = UDim2.new(0, 0, 0, 0); Header.Size = UDim2.new(1, 0, 0, 44); Header.ZIndex = 2
+local hC = Instance.new("UICorner"); hC.CornerRadius = UDim.new(0, 12); hC.Parent = Header
+local hFix = Instance.new("Frame")
+hFix.Parent = Header; hFix.BackgroundColor3 = BG; hFix.BorderSizePixel = 0
+hFix.Position = UDim2.new(0, 0, 1, -12); hFix.Size = UDim2.new(1, 0, 0, 12); hFix.ZIndex = 2
 
 local Title = Instance.new("TextLabel")
-Title.Parent = Window; Title.BackgroundTransparency = 1
-Title.Position = UDim2.new(0, 12, 0, 7); Title.Size = UDim2.new(1, -80, 0, 20)
-Title.Font = Enum.Font.GothamBold; Title.Text = "🔪 Imp3rson MM2 Hub • PRO"
-Title.TextColor3 = Color3.new(1,1,1); Title.TextSize = 15
-Title.TextXAlignment = Enum.TextXAlignment.Left; Title.ZIndex = 2
+Title.Parent = Header; Title.BackgroundTransparency = 1
+Title.Position = UDim2.new(0, 16, 0, 0); Title.Size = UDim2.new(1, -140, 1, 0)
+Title.Font = Enum.Font.GothamBold; Title.Text = "🔪 Imp3rson MM2 Hub  •  v2.1"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255); Title.TextSize = 15
+Title.TextXAlignment = Enum.TextXAlignment.Left; Title.ZIndex = 3
 
 local roleLbl = Instance.new("TextLabel")
-roleLbl.Parent = Window; roleLbl.BackgroundTransparency = 1
-roleLbl.Position = UDim2.new(0, 12, 0, 27); roleLbl.Size = UDim2.new(1, -24, 0, 14)
-roleLbl.Font = Enum.Font.GothamMedium; roleLbl.TextSize = 11
-roleLbl.TextXAlignment = Enum.TextXAlignment.Left; roleLbl.ZIndex = 2
+roleLbl.Parent = Header; roleLbl.BackgroundTransparency = 1
+roleLbl.Position = UDim2.new(1, -200, 0, 0); roleLbl.Size = UDim2.new(0, 120, 1, 0)
+roleLbl.Font = Enum.Font.GothamBold; roleLbl.TextSize = 11
+roleLbl.TextXAlignment = Enum.TextXAlignment.Right; roleLbl.ZIndex = 3
 
 local function winBtn(text, xOffset)
     local b = Instance.new("TextButton")
-    b.Parent = Window; b.BackgroundColor3 = CARD
-    b.Position = UDim2.new(1, xOffset, 0, 4); b.Size = UDim2.new(0, 26, 0, 26)
+    b.Parent = Header; b.BackgroundColor3 = CARD
+    b.Position = UDim2.new(1, xOffset, 0, 6); b.Size = UDim2.new(0, 28, 0, 28)
     b.Font = Enum.Font.GothamBold; b.Text = text
-    b.TextColor3 = Color3.new(1,1,1); b.TextSize = 14; b.ZIndex = 3
-    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = b
+    b.TextColor3 = Color3.fromRGB(255, 255, 255); b.TextSize = 14; b.ZIndex = 4
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = b
     return b
 end
-local minBtn = winBtn("—", -62)
-local closeBtn = winBtn("X", -32)
+local minBtn = winBtn("—", -74)
+local closeBtn = winBtn("X", -40)
 
--- Barra de abas
-local TabBar = Instance.new("Frame")
-TabBar.Parent = Window; TabBar.BackgroundColor3 = TABBAR
-TabBar.Position = UDim2.new(0, 8, 0, 46); TabBar.Size = UDim2.new(1, -16, 0, 34); TabBar.ZIndex = 2
-local tbC = Instance.new("UICorner"); tbC.CornerRadius = UDim.new(0, 8); tbC.Parent = TabBar
+local Divider = Instance.new("Frame")
+Divider.Parent = Window; Divider.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+Divider.Position = UDim2.new(0, 0, 0, 44); Divider.Size = UDim2.new(1, 0, 0, 1); Divider.ZIndex = 2
 
-local tabs, pages = {}, {}
+-- ==================== SIDEBAR ====================
+local Sidebar = Instance.new("Frame")
+Sidebar.Parent = Window; Sidebar.BackgroundColor3 = SIDEBAR; Sidebar.BorderSizePixel = 0
+Sidebar.Position = UDim2.new(0, 0, 0, 45); Sidebar.Size = UDim2.new(0, 130, 1, -45); Sidebar.ZIndex = 2
+local sbC = Instance.new("UICorner"); sbC.CornerRadius = UDim.new(0, 12); sbC.Parent = Sidebar
+local sbFix = Instance.new("Frame")
+sbFix.Parent = Sidebar; sbFix.BackgroundColor3 = SIDEBAR; sbFix.BorderSizePixel = 0
+sbFix.Position = UDim2.new(1, -12, 0, 0); sbFix.Size = UDim2.new(0, 12, 1, 0); sbFix.ZIndex = 2
+
+local sidebarLayout = Instance.new("UIListLayout")
+sidebarLayout.Parent = Sidebar; sidebarLayout.Padding = UDim.new(0, 6)
+sidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+local sidebarPad = Instance.new("UIPadding")
+sidebarPad.Parent = Sidebar; sidebarPad.PaddingTop = UDim.new(0, 12)
+sidebarPad.PaddingLeft = UDim.new(0, 8); sidebarPad.PaddingRight = UDim.new(0, 8)
+
+-- ==================== CONTENT ====================
+local ContentArea = Instance.new("Frame")
+ContentArea.Parent = Window; ContentArea.BackgroundTransparency = 1
+ContentArea.Position = UDim2.new(0, 130, 0, 45); ContentArea.Size = UDim2.new(1, -130, 1, -45)
+ContentArea.ZIndex = 2
+
+-- ==================== ABAS ====================
+local pages = {}
+local tabButtons = {}
 local TAB_NAMES = {
-    { id = "ESP", label = "👁️ ESP" },
-    { id = "Murder", label = "🔪 Murder" },
-    { id = "Sheriff", label = "🔫 Sheriff" },
-    { id = "Innocent", label = "🟢 Innocent" },
+    { id = "ESP", label = "👁️  ESP" },
+    { id = "Murder", label = "🔪  Murder" },
+    { id = "Sheriff", label = "🔫  Sheriff" },
+    { id = "Innocent", label = "🟢  Innocent" },
 }
 
 for i, tab in ipairs(TAB_NAMES) do
     local b = Instance.new("TextButton")
-    b.Parent = TabBar; b.BackgroundColor3 = CARD
-    b.Position = UDim2.new((i-1)*0.25 + 0.006, 0, 0, 3)
-    b.Size = UDim2.new(0.25, -6, 1, -6)
+    b.Parent = Sidebar; b.BackgroundColor3 = CARD; b.BorderSizePixel = 0
+    b.Size = UDim2.new(1, 0, 0, 38)
     b.Font = Enum.Font.GothamBold; b.Text = tab.label
-    b.TextColor3 = Color3.new(1,1,1); b.TextSize = 11; b.ZIndex = 3
-    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = b
-    tabs[tab.id] = b
+    b.TextColor3 = Color3.fromRGB(220, 220, 220); b.TextSize = 13
+    b.TextXAlignment = Enum.TextXAlignment.Left
+    b.LayoutOrder = i; b.ZIndex = 3; b.AutoButtonColor = false
+    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 8); bc.Parent = b
+    local bp = Instance.new("UIPadding"); bp.PaddingLeft = UDim.new(0, 12); bp.Parent = b
+    tabButtons[tab.id] = b
+
+    local indicator = Instance.new("Frame")
+    indicator.Parent = b; indicator.BackgroundColor3 = ACCENT; indicator.BorderSizePixel = 0
+    indicator.Position = UDim2.new(0, 0, 0.2, 0); indicator.Size = UDim2.new(0, 3, 0.6, 0)
+    indicator.ZIndex = 4; indicator.Visible = false
+    b:SetAttribute("Indicator", indicator)
 
     local page = Instance.new("ScrollingFrame")
-    page.Parent = Window; page.BackgroundTransparency = 1
-    page.Position = UDim2.new(0, 0, 0, 86); page.Size = UDim2.new(1, 0, 1, -96)
-    page.CanvasSize = UDim2.new(0, 0, 0, 0)
-    page.ScrollBarThickness = 3; page.ScrollBarImageColor3 = ACCENT
+    page.Parent = ContentArea; page.BackgroundTransparency = 1
+    page.Size = UDim2.new(1, -20, 1, -20); page.Position = UDim2.new(0, 10, 0, 10)
+    page.CanvasSize = UDim2.new(0, 0, 0, 0); page.ScrollBarThickness = 3
+    page.ScrollBarImageColor3 = ACCENT
     page.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    page.Visible = (i == 1); page.ZIndex = 2
-    local layout = Instance.new("UIListLayout")
-    layout.Parent = page; layout.Padding = UDim.new(0, 6)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    local pad = Instance.new("UIPadding")
-    pad.Parent = page; pad.PaddingLeft = UDim.new(0, 12); pad.PaddingRight = UDim.new(0, 12)
+    page.Visible = (i == 1); page.ZIndex = 3
+    local pl = Instance.new("UIListLayout")
+    pl.Parent = page; pl.Padding = UDim.new(0, 6); pl.SortOrder = Enum.SortOrder.LayoutOrder
     pages[tab.id] = page
+
+    b.MouseButton1Click:Connect(function()
+        for tid, btn in pairs(tabButtons) do
+            btn.BackgroundColor3 = CARD
+            btn.TextColor3 = Color3.fromRGB(220, 220, 220)
+            local ind = btn:GetAttribute("Indicator")
+            if ind then ind.Visible = false end
+        end
+        b.BackgroundColor3 = ACCENT
+        b.TextColor3 = Color3.fromRGB(255, 255, 255)
+        indicator.Visible = true
+        for tid, p in pairs(pages) do p.Visible = (tid == tab.id) end
+    end)
+    b.MouseEnter:Connect(function()
+        if b.BackgroundColor3 ~= ACCENT then b.BackgroundColor3 = CARD_HOVER end
+    end)
+    b.MouseLeave:Connect(function()
+        if b.BackgroundColor3 ~= ACCENT then b.BackgroundColor3 = CARD end
+    end)
+
+    if i == 1 then
+        b.BackgroundColor3 = ACCENT
+        b.TextColor3 = Color3.fromRGB(255, 255, 255)
+        indicator.Visible = true
+    end
 end
 
-local currentTab = "ESP"
-local function switchTab(id)
-    currentTab = id
-    for tid, b in pairs(tabs) do b.BackgroundColor3 = (tid == id) and ACCENT or CARD end
-    for tid, p in pairs(pages) do p.Visible = (tid == id) end
+-- ==================== HELPERS ====================
+local function addSection(page, text)
+    local l = Instance.new("TextLabel")
+    l.Parent = page; l.BackgroundTransparency = 1
+    l.Size = UDim2.new(1, 0, 0, 22); l.LayoutOrder = #page:GetChildren() + 1
+    l.Font = Enum.Font.GothamBold; l.Text = text; l.TextSize = 12
+    l.TextColor3 = ACCENT; l.TextXAlignment = Enum.TextXAlignment.Left; l.ZIndex = 4
+    return l
 end
-for tid, b in pairs(tabs) do b.MouseButton1Click:Connect(function() switchTab(tid) end) end
-switchTab("ESP")
 
--- Helpers de UI
-local function pageToggle(page, label, key, color)
+local function addToggle(page, label, key, color)
     local b = Instance.new("TextButton")
-    b.Parent = page; b.BackgroundColor3 = CARD
-    b.Size = UDim2.new(1, 0, 0, 32); b.LayoutOrder = #page:GetChildren()
-    b.Font = Enum.Font.GothamMedium; b.TextColor3 = Color3.new(1,1,1); b.TextSize = 13; b.ZIndex = 3
-    b.TextXAlignment = Enum.TextXAlignment.Left
+    b.Parent = page; b.BackgroundColor3 = CARD; b.BorderSizePixel = 0
+    b.Size = UDim2.new(1, 0, 0, 34); b.LayoutOrder = #page:GetChildren() + 1
+    b.Font = Enum.Font.GothamMedium; b.TextColor3 = Color3.fromRGB(255,255,255); b.TextSize = 13
+    b.TextXAlignment = Enum.TextXAlignment.Left; b.ZIndex = 4; b.AutoButtonColor = false
     local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = b
-    local pad = Instance.new("UIPadding"); pad.PaddingLeft = UDim.new(0, 10); pad.Parent = b
+    local p = Instance.new("UIPadding"); p.PaddingLeft = UDim.new(0, 12); p.Parent = b
     local accent = color or ACCENT
+    local dot = Instance.new("Frame")
+    dot.Parent = b; dot.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    dot.Position = UDim2.new(1, -22, 0.5, -6); dot.Size = UDim2.new(0, 12, 0, 12)
+    dot.BorderSizePixel = 0; dot.ZIndex = 5
+    local dc = Instance.new("UICorner"); dc.CornerRadius = UDim.new(1, 0); dc.Parent = dot
     local function refresh()
-        b.Text = (Settings[key] and "● " or "○ ") .. label
-        b.BackgroundColor3 = Settings[key] and accent or CARD
+        b.Text = label
+        dot.BackgroundColor3 = Settings[key] and accent or Color3.fromRGB(80, 80, 80)
+        b.BackgroundColor3 = Settings[key] and Color3.fromRGB(45, 45, 50) or CARD
     end
     b.MouseButton1Click:Connect(function() Settings[key] = not Settings[key]; refresh() end)
+    b.MouseEnter:Connect(function() if not Settings[key] then b.BackgroundColor3 = CARD_HOVER end end)
+    b.MouseLeave:Connect(function() if not Settings[key] then b.BackgroundColor3 = CARD end end)
     refresh()
     return b
 end
 
-local function pageSection(page, text)
-    local l = Instance.new("TextLabel")
-    l.Parent = page; l.BackgroundTransparency = 1
-    l.Size = UDim2.new(1, 0, 0, 20); l.LayoutOrder = #page:GetChildren()
-    l.Font = Enum.Font.GothamBold; l.Text = text; l.TextSize = 12
-    l.TextColor3 = ACCENT; l.TextXAlignment = Enum.TextXAlignment.Left; l.ZIndex = 3
-    return l
-end
-
-local function pageSlider(page, label, key, min, max, step)
+local function addSlider(page, label, key, min, max, step)
     local frame = Instance.new("Frame")
-    frame.Parent = page; frame.BackgroundColor3 = CARD
-    frame.Size = UDim2.new(1, 0, 0, 48); frame.LayoutOrder = #page:GetChildren(); frame.ZIndex = 3
+    frame.Parent = page; frame.BackgroundColor3 = CARD; frame.BorderSizePixel = 0
+    frame.Size = UDim2.new(1, 0, 0, 52); frame.LayoutOrder = #page:GetChildren() + 1; frame.ZIndex = 4
     local fc = Instance.new("UICorner"); fc.CornerRadius = UDim.new(0, 8); fc.Parent = frame
+
     local l = Instance.new("TextLabel")
     l.Parent = frame; l.BackgroundTransparency = 1
-    l.Position = UDim2.new(0, 10, 0, 4); l.Size = UDim2.new(1, -90, 0, 16)
+    l.Position = UDim2.new(0, 12, 0, 6); l.Size = UDim2.new(1, -24, 0, 16)
     l.Font = Enum.Font.GothamMedium; l.TextSize = 12
-    l.TextColor3 = Color3.new(1,1,1); l.TextXAlignment = Enum.TextXAlignment.Left; l.ZIndex = 4
+    l.TextColor3 = Color3.fromRGB(255,255,255); l.TextXAlignment = Enum.TextXAlignment.Left; l.ZIndex = 5
+
     local track = Instance.new("Frame")
-    track.Parent = frame; track.BackgroundColor3 = Color3.fromRGB(50,50,55)
-    track.Position = UDim2.new(0, 10, 0, 28); track.Size = UDim2.new(1, -100, 0, 8); track.ZIndex = 4
-    local tc = Instance.new("UICorner"); tc.CornerRadius = UDim.new(1,0); tc.Parent = track
+    track.Parent = frame; track.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+    track.Position = UDim2.new(0, 12, 0, 32); track.Size = UDim2.new(1, -24, 0, 8); track.ZIndex = 5
+    local tc = Instance.new("UICorner"); tc.CornerRadius = UDim.new(1, 0); tc.Parent = track
+
     local fill = Instance.new("Frame")
-    fill.Parent = track; fill.BackgroundColor3 = ACCENT; fill.Size = UDim2.new(0,0,1,0); fill.ZIndex = 5
-    local flc = Instance.new("UICorner"); flc.CornerRadius = UDim.new(1,0); flc.Parent = fill
+    fill.Parent = track; fill.BackgroundColor3 = ACCENT; fill.Size = UDim2.new(0, 0, 1, 0); fill.ZIndex = 6
+    local flc = Instance.new("UICorner"); flc.CornerRadius = UDim.new(1, 0); flc.Parent = fill
+
     local function refresh()
         l.Text = label .. ": " .. Settings[key]
-        fill.Size = UDim2.new((Settings[key]-min)/(max-min), 0, 1, 0)
+        fill.Size = UDim2.new((Settings[key] - min) / (max - min), 0, 1, 0)
     end
     local function setFrom(x)
-        local r = math.clamp((x - track.AbsolutePosition.X)/track.AbsoluteSize.X, 0, 1)
-        Settings[key] = math.clamp(math.floor((min + (max-min)*r)/step + 0.5)*step, min, max)
+        local r = math.clamp((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+        Settings[key] = math.clamp(math.floor((min + (max - min) * r) / step + 0.5) * step, min, max)
         refresh()
     end
     local sliding = false
@@ -590,50 +833,55 @@ local function pageSlider(page, label, key, min, max, step)
     return frame
 end
 
--- ========== ABA ESP ==========
-pageSection(pages.ESP, "👁️ ESP POR FUNÇÃO (CORES AUTOMÁTICAS)")
-pageToggle(pages.ESP, "ESP Master", "ESPEnabled")
-pageToggle(pages.ESP, "🔴 ESP Murder (Vermelho)", "ShowMurder", Settings.Colors.Murder)
-pageToggle(pages.ESP, "🔵 ESP Sheriff (Azul)", "ShowSheriff", Settings.Colors.Sheriff)
-pageToggle(pages.ESP, "🟢 ESP Inocentes (Verde)", "ShowInnocent", Settings.Colors.Innocent)
-pageToggle(pages.ESP, "Box", "ESPBox")
-pageToggle(pages.ESP, "Name + Função", "ESPName")
-pageToggle(pages.ESP, "Distance", "ESPDist")
-pageToggle(pages.ESP, "Tracers", "ESPTracer")
-pageToggle(pages.ESP, "Chams (através de paredes)", "ESPChams")
+-- ==================== POPULAR ABAS ====================
+addSection(pages.ESP, "ESP POR FUNÇÃO")
+addToggle(pages.ESP, "ESP Master", "ESPEnabled")
+addToggle(pages.ESP, "🔴 Murder (Vermelho)", "ShowMurder", Settings.Colors.Murder)
+addToggle(pages.ESP, "🔵 Sheriff (Azul)", "ShowSheriff", Settings.Colors.Sheriff)
+addToggle(pages.ESP, "🟢 Inocentes (Verde)", "ShowInnocent", Settings.Colors.Innocent)
+addSection(pages.ESP, "OPÇÕES VISUAIS")
+addToggle(pages.ESP, "Box", "ESPBox")
+addToggle(pages.ESP, "Nome + Função", "ESPName")
+addToggle(pages.ESP, "Distância", "ESPDist")
+addToggle(pages.ESP, "Tracers (linhas)", "ESPTracer")
+addToggle(pages.ESP, "Chams (atravessa paredes)", "ESPChams")
 
--- ========== ABA MURDER ==========
-pageSection(pages.Murder, "🔪 FUNÇÕES DE MURDER")
-pageToggle(pages.Murder, "🔪 Auto Knife ALL (perto)", "AutoKnifeAll", Settings.Colors.Murder)
-pageSlider(pages.Murder, "Knife Range", "KnifeRange", 5, 60, 5)
-pageToggle(pages.Murder, "🎯 Auto Throw Knife (longe)", "AutoThrow", Settings.Colors.Murder)
-pageSlider(pages.Murder, "Throw Range", "ThrowRange", 50, 300, 25)
-pageSection(pages.Murder, "🎯 AIMBOT")
-pageToggle(pages.Murder, "Aimbot", "AimbotEnabled", Settings.Colors.Murder)
-pageToggle(pages.Murder, "🔥 AIM RAGE (instantâneo)", "AimRage", Settings.Colors.Murder)
-pageSlider(pages.Murder, "FOV", "AimFOV", 50, 400, 25)
+addSection(pages.Murder, "🔪 AUTO KNIFE")
+addToggle(pages.Murder, "Auto Knife ALL (perto)", "AutoKnifeAll", Settings.Colors.Murder)
+addSlider(pages.Murder, "Knife Range", "KnifeRange", 5, 60, 5)
+addSection(pages.Murder, "🎯 AUTO THROW")
+addToggle(pages.Murder, "Auto Throw Knife (longe)", "AutoThrow", Settings.Colors.Murder)
+addSlider(pages.Murder, "Throw Range", "ThrowRange", 50, 300, 25)
+addSection(pages.Murder, "🎯 AIMBOT")
+addToggle(pages.Murder, "Aimbot", "AimbotEnabled", Settings.Colors.Murder)
+addToggle(pages.Murder, "🔥 AIM RAGE (instantâneo)", "AimRage", Settings.Colors.Murder)
+addSlider(pages.Murder, "FOV", "AimFOV", 50, 400, 25)
 
--- ========== ABA SHERIFF ==========
-pageSection(pages.Sheriff, "🔫 FUNÇÕES DE SHERIFF")
-pageToggle(pages.Sheriff, "🔫 Auto Shot Murder", "AutoShootMurder", Settings.Colors.Sheriff)
-pageSlider(pages.Sheriff, "Shoot Range", "ShootRange", 50, 400, 25)
-pageToggle(pages.Sheriff, "🎯 Auto Aim Murder", "AutoAimMurder", Settings.Colors.Sheriff)
-pageToggle(pages.Sheriff, "🔥 AIM RAGE", "AimRage", Settings.Colors.Sheriff)
-pageToggle(pages.Sheriff, "Aimbot (geral)", "AimbotEnabled", Settings.Colors.Sheriff)
+addSection(pages.Sheriff, "🔫 AUTO SHOT")
+addToggle(pages.Sheriff, "Auto Shot Murder", "AutoShootMurder", Settings.Colors.Sheriff)
+addSlider(pages.Sheriff, "Shoot Range", "ShootRange", 50, 400, 25)
+addSection(pages.Sheriff, "🎯 AUTO AIM")
+addToggle(pages.Sheriff, "Auto Aim Murder", "AutoAimMurder", Settings.Colors.Sheriff)
+addToggle(pages.Sheriff, "🔥 AIM RAGE", "AimRage", Settings.Colors.Sheriff)
+addToggle(pages.Sheriff, "Aimbot (geral)", "AimbotEnabled", Settings.Colors.Sheriff)
 
--- ========== ABA INNOCENT ==========
-pageSection(pages.Innocent, "🟢 FUNÇÕES DE INNOCENT")
-pageToggle(pages.Innocent, "💰 Auto Collect Money", "AutoCollect", Settings.Colors.Innocent)
-pageSlider(pages.Innocent, "Collect Range", "CollectRange", 20, 200, 10)
-pageToggle(pages.Innocent, "🛒 Auto Buy", "AutoBuy", Settings.Colors.Innocent)
-pageToggle(pages.Innocent, "👁️ ESP (ver murder)", "ESPEnabled", Settings.Colors.Innocent)
+addSection(pages.Innocent, "🟢 FUNÇÕES BÁSICAS")
+addToggle(pages.Innocent, "💰 Auto Collect Money", "AutoCollect", Settings.Colors.Innocent)
+addSlider(pages.Innocent, "Collect Range", "CollectRange", 20, 200, 10)
+addToggle(pages.Innocent, "🛒 Auto Buy", "AutoBuy", Settings.Colors.Innocent)
+addToggle(pages.Innocent, "👁️ ESP (ver murder)", "ESPEnabled", Settings.Colors.Innocent)
 
--- Indicador de função atual
+addSection(pages.Innocent, "🔫 ARMA DO SHERIFF")
+addToggle(pages.Innocent, "🔫 Auto Pickup Gun (TP pra arma)", "AutoPickupGun", Settings.Colors.Innocent)
+addToggle(pages.Innocent, "📡 Auto Notify Weapon (ESP da arma)", "AutoNotifyWeapon", Settings.Colors.Innocent)
+addSlider(pages.Innocent, "Notify Distance", "GunNotifyDistance", 50, 500, 25)
+
+-- ==================== INDICADOR DE ROLE ====================
 task.spawn(function()
     while not MM2.Unloaded do
         pcall(function()
             local r = MM2.myRole()
-            roleLbl.Text = "Sua função: " .. (r == "Murder" and "🔪 MURDER" or r == "Sheriff" and "🔫 SHERIFF" or "🟢 INNOCENT")
+            roleLbl.Text = r == "Murder" and "🔪 MURDER" or r == "Sheriff" and "🔫 SHERIFF" or "🟢 INNOCENT"
             roleLbl.TextColor3 = Settings.Colors[r]
             wS.Color = Settings.Colors[r]
         end)
@@ -644,7 +892,7 @@ end)
 -- ==================== CONTROLES DA JANELA ====================
 local dragFrame = Instance.new("Frame")
 dragFrame.Parent = Window; dragFrame.BackgroundTransparency = 1
-dragFrame.Position = UDim2.new(0, 0, 0, 0); dragFrame.Size = UDim2.new(1, -70, 0, 44); dragFrame.ZIndex = 2
+dragFrame.Position = UDim2.new(0, 0, 0, 0); dragFrame.Size = UDim2.new(1, -80, 0, 44); dragFrame.ZIndex = 5
 local dragging, dragStart, startPos = false, nil, nil
 dragFrame.InputBegan:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -662,27 +910,60 @@ end)
 local minimized = false
 minBtn.MouseButton1Click:Connect(function()
     minimized = not minimized
-    TabBar.Visible = not minimized
-    for _, p in pairs(pages) do p.Visible = not minimized and (p == pages[currentTab]) end
+    Sidebar.Visible = not minimized
+    ContentArea.Visible = not minimized
+    Divider.Visible = not minimized
     minBtn.Text = minimized and "□" or "—"
-    Window.Size = minimized and UDim2.new(0, 340, 0, 40) or UDim2.new(0, 340, 0, 460)
+    Window.Size = minimized and UDim2.new(0, 560, 0, 44) or UDim2.new(0, 560, 0, 380)
 end)
 
 closeBtn.MouseButton1Click:Connect(function()
     MM2.Unloaded = true
     for _, c in pairs(MM2.Cache) do MM2.wipeDrawings(c) end
     if MM2.FovCircle then pcall(function() MM2.FovCircle:Remove() end) end
+    if MM2.gunEspDrawings then
+        for _, d in pairs(MM2.gunEspDrawings) do
+            for _, o in pairs(d) do pcall(function() o:Remove() end) end
+        end
+    end
     ScreenGui:Destroy()
 end)
 
--- Botão flutuante 🔪
+-- ==================== BOTÃO FLUTUANTE ====================
 local floatBtn = Instance.new("TextButton")
 floatBtn.Parent = ScreenGui; floatBtn.BackgroundColor3 = ACCENT
 floatBtn.Position = UDim2.new(0, 8, 0.6, -23); floatBtn.Size = UDim2.new(0, 46, 0, 46)
 floatBtn.Font = Enum.Font.GothamBold; floatBtn.Text = "🔪"
-floatBtn.TextColor3 = Color3.new(1,1,1); floatBtn.TextSize = 20; floatBtn.ZIndex = 6
-local fbC = Instance.new("UICorner"); fbC.CornerRadius = UDim.new(1,0); fbC.Parent = floatBtn
-local fbS = Instance.new("UIStroke"); fbS.Color = Color3.new(1,1,1); fbS.Thickness = 1.5; fbS.Parent = floatBtn
-floatBtn.MouseButton1Click:Connect(function() Window.Visible = not Window.Visible end)
+floatBtn.TextColor3 = Color3.fromRGB(255,255,255); floatBtn.TextSize = 20; floatBtn.ZIndex = 6
+local fbC = Instance.new("UICorner"); fbC.CornerRadius = UDim.new(1, 0); fbC.Parent = floatBtn
+local fbS = Instance.new("UIStroke"); fbS.Color = Color3.fromRGB(255,255,255); fbS.Thickness = 1.5; fbS.Parent = floatBtn
 
-print("[✅] MM2 PARTE 2 (Funções + UI) carregada! Hub completo ativo.")
+local fDrag, fStart, fStartPos
+floatBtn.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.Touch then
+        fDrag = true; fStart = i.Position; fStartPos = floatBtn.Position
+    end
+end)
+floatBtn.InputEnded:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.Touch then
+        fDrag = false
+        if fStart then
+            local d = i.Position - fStart
+            if math.abs(d.X) < 10 and math.abs(d.Y) < 10 then
+                Window.Visible = not Window.Visible
+            end
+        end
+        fStart = nil
+    end
+end)
+floatBtn.InputChanged:Connect(function(i)
+    if not fDrag then return end
+    if i.UserInputType == Enum.UserInputType.Touch then
+        local d = i.Position - fStart
+        floatBtn.Position = UDim2.new(
+            fStartPos.X.Scale, fStartPos.X.Offset + d.X,
+            fStartPos.Y.Scale, fStartPos.Y.Offset + d.Y)
+    end
+end)
+
+print("[✅] MM2 v2.1 PARTE 3/3 (UI completa) carregada!")
